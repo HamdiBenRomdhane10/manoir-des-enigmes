@@ -11,6 +11,7 @@ public class MenuController : MonoBehaviour
     void Start()
     {
         Time.timeScale = 1f;
+        AudioManager.Get().StartMusic();
         Color bg = new Color(0.08f, 0.09f, 0.14f);
 
         var cam = Camera.main;
@@ -52,9 +53,10 @@ public class MenuController : MonoBehaviour
             "• Une mauvaise réponse vous fait perdre 5 secondes\n" +
             "• Un checkpoint est enregistré à chaque énigme résolue\n" +
             "• Quand les 3 énigmes sont résolues, la porte de droite devient VERTE : traversez-la !\n" +
-            "• Vous avez 1 minute seulement ! Échap = pause (reprendre, menu ou quitter)";
+            "• Vous avez 1 minute seulement ! Échap = pause (reprendre, menu ou quitter)\n" +
+            "• M = couper ou remettre le son";
         UIHelper.CreateText(instr, txt, 38, TextAnchor.UpperLeft,
-            new Vector2(0.5f, 0.5f), new Vector2(0, 40), new Vector2(1500, 600), Color.white);
+            new Vector2(0.5f, 0.5f), new Vector2(0, -40), new Vector2(1500, 600), Color.white);
 
         UIHelper.CreateButton(instr, "RETOUR", new Vector2(420, 90), new Vector2(0, -400), Retour);
         instructionsPanel.SetActive(false);

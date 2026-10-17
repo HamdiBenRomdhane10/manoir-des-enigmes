@@ -101,6 +101,7 @@ public static class UIHelper
         img.color = color ?? new Color(0.25f, 0.45f, 0.85f);
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = img;
+        btn.onClick.AddListener(() => AudioManager.Get().PlayClick());   // son de clic
         btn.onClick.AddListener(onClick);
 
         CreateText(go.transform, label, 40, TextAnchor.MiddleCenter,

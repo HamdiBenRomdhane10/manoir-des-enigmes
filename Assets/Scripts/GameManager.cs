@@ -13,7 +13,7 @@ public class GameManager : MonoBehaviour
     const int RiddleCount = 3;
 
     // Réglages (constantes : on les change ici dans le code)
-    const float TimeLimit = 90f;       // durée d'une nouvelle partie : 1 minute
+    const float TimeLimit = 60f;       // durée d'une nouvelle partie : 1 minute
     const float ResumeTime = 30f;      // temps donné quand on reprend au checkpoint
     const float WrongPenalty = 5f;     // pénalité par mauvaise réponse (secondes)
 
@@ -50,7 +50,9 @@ public class GameManager : MonoBehaviour
     {
         Instance = this;
         Time.timeScale = 1f;
+        AudioManager.Get().StartMusic();
         squareSprite = MakeSquareSprite();
+        LoadPrefabs();
 
         // Reprise au checkpoint, ou nouvelle partie avec des énigmes tirées au hasard ?
         bool resuming = Checkpoint.resume && Checkpoint.hasCheckpoint;
@@ -130,22 +132,56 @@ public class GameManager : MonoBehaviour
         return v.transform;
     }
 
+    // PREFABS : modèles d'objets enregistrés dans Assets/Resources/Prefabs.
+    // Si un prefab est absent, on garde l'ancien dessin par code : le jeu marche dans tous les cas.
+    GameObject pfPlayer, pfBlock, pfDoor, pfWall, pfFloor;
+
+    void LoadPrefabs()
+    {
+        pfPlayer = Resources.Load<GameObject>("Prefabs/Player");
+        pfBlock = Resources.Load<GameObject>("Prefabs/RiddleBlock");
+        pfDoor = Resources.Load<GameObject>("Prefabs/Door");
+        pfWall = Resources.Load<GameObject>("Prefabs/Wall");
+        pfFloor = Resources.Load<GameObject>("Prefabs/Floor");
+    }
+
+    // Mur : instance du prefab Wall (briques répétées) ou, à défaut, carré coloré
+    void MakeWall(string name, Vector2 pos, Vector2 size)
+    {
+        if (pfWall == null)
+        {
+            MakeBox(name, pos, size, new Color(0.45f, 0.35f, 0.3f), true, 0);
+            return;
+        }
+        var w = Instantiate(pfWall, new Vector3(pos.x, pos.y, 0f), Quaternion.identity);
+        w.name = name;
+        w.GetComponent<SpriteRenderer>().size = size;   // la texture se répète sur cette taille
+        w.GetComponent<BoxCollider2D>().size = size;
+    }
+
     void BuildWorld(bool resuming)
     {
-        Color wallColor = new Color(0.45f, 0.35f, 0.3f);
-
         // Sol
-        MakeBox("Sol", Vector2.zero, new Vector2(16, 8), new Color(0.18f, 0.2f, 0.28f), false, -10);
+        if (pfFloor != null)
+        {
+            var floor = Instantiate(pfFloor, Vector3.zero, Quaternion.identity);
+            floor.name = "Sol";
+            floor.GetComponent<SpriteRenderer>().size = new Vector2(16, 8);
+        }
+        else
+        {
+            MakeBox("Sol", Vector2.zero, new Vector2(16, 8), new Color(0.18f, 0.2f, 0.28f), false, -10);
+        }
 
         // Murs extérieurs
-        MakeBox("MurHaut", new Vector2(0, 4.25f), new Vector2(17, 0.5f), wallColor, true, 0);
-        MakeBox("MurBas", new Vector2(0, -4.25f), new Vector2(17, 0.5f), wallColor, true, 0);
-        MakeBox("MurGauche", new Vector2(-8.25f, 0), new Vector2(0.5f, 9), wallColor, true, 0);
-        MakeBox("MurDroit", new Vector2(8.25f, 0), new Vector2(0.5f, 9), wallColor, true, 0);
+        MakeWall("MurHaut", new Vector2(0, 4.25f), new Vector2(17, 0.5f));
+        MakeWall("MurBas", new Vector2(0, -4.25f), new Vector2(17, 0.5f));
+        MakeWall("MurGauche", new Vector2(-8.25f, 0), new Vector2(0.5f, 9));
+        MakeWall("MurDroit", new Vector2(8.25f, 0), new Vector2(0.5f, 9));
 
         // Murs intérieurs (forment un parcours en "S")
-        MakeBox("MurInterieurA", new Vector2(-2.5f, 2f), new Vector2(0.5f, 4), wallColor, true, 0);
-        MakeBox("MurInterieurB", new Vector2(2.5f, -2f), new Vector2(0.5f, 4), wallColor, true, 0);
+        MakeWall("MurInterieurA", new Vector2(-2.5f, 2f), new Vector2(0.5f, 4));
+        MakeWall("MurInterieurB", new Vector2(2.5f, -2f), new Vector2(0.5f, 4));
 
         // Les 3 énigmes (tirées au hasard, ou rechargées depuis le checkpoint)
         for (int i = 0; i < RiddleCount; i++)
@@ -158,42 +194,73 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Porte de sortie (rouge = verrouillée)
-        var exit = new GameObject("PorteSortie");
-        exit.transform.position = new Vector2(7.6f, 2.5f);
-        exit.transform.localScale = new Vector3(0.6f, 1.8f, 1f);
-        var col = exit.AddComponent<BoxCollider2D>();
-        col.isTrigger = true;
-        exitDoor = exit.AddComponent<ExitTrigger>();
-        exitDoor.visual = MakeVisual(exit.transform, new Color(0.85f, 0.2f, 0.2f), 1);
+        // Porte de sortie
+        if (pfDoor != null)
+        {
+            var d = Instantiate(pfDoor, new Vector3(7.6f, 2.5f, 0f), Quaternion.identity);
+            d.name = "PorteSortie";
+            exitDoor = d.GetComponent<ExitTrigger>();
+        }
+        else
+        {
+            var exit = new GameObject("PorteSortie");
+            exit.transform.position = new Vector2(7.6f, 2.5f);
+            exit.transform.localScale = new Vector3(0.6f, 1.8f, 1f);
+            var col = exit.AddComponent<BoxCollider2D>();
+            col.isTrigger = true;
+            exitDoor = exit.AddComponent<ExitTrigger>();
+            exitDoor.visual = MakeVisual(exit.transform, new Color(0.85f, 0.2f, 0.2f), 1);
+        }
         if (solved >= RiddleCount) exitDoor.Open();
 
         // Joueur (au départ, ou à la position du checkpoint)
         Vector2 pos = resuming ? Checkpoint.position : startPos;
-        var p = new GameObject("Joueur");
-        p.transform.position = pos;
-        p.transform.localScale = new Vector3(0.7f, 0.7f, 1f);
-        p.AddComponent<BoxCollider2D>();
-        var rb = p.AddComponent<Rigidbody2D>();
-        rb.gravityScale = 0f;
-        rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-        player = p.AddComponent<PlayerController>();
-        player.visual = MakeVisual(p.transform, new Color(0.3f, 0.8f, 1f), 5);
+        if (pfPlayer != null)
+        {
+            var pgo = Instantiate(pfPlayer, new Vector3(pos.x, pos.y, 0f), Quaternion.identity);
+            pgo.name = "Joueur";
+            player = pgo.GetComponent<PlayerController>();
+        }
+        else
+        {
+            var p = new GameObject("Joueur");
+            p.transform.position = pos;
+            p.transform.localScale = new Vector3(0.7f, 0.7f, 1f);
+            p.AddComponent<BoxCollider2D>();
+            var rb = p.AddComponent<Rigidbody2D>();
+            rb.gravityScale = 0f;
+            rb.constraints = RigidbodyConstraints2D.FreezeRotation;
+            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            player = p.AddComponent<PlayerController>();
+            player.visual = MakeVisual(p.transform, Color.white, 5);
+            player.idleSprite = CharacterSprites.Idle;
+            player.walkSprites = CharacterSprites.Walk;
+            player.visual.GetComponent<SpriteRenderer>().sprite = player.idleSprite;
+        }
     }
 
     RiddleObject CreateRiddle(string name, Vector2 pos, int bankId)
     {
-        var go = new GameObject(name);
-        go.transform.position = pos;
-        go.transform.localScale = new Vector3(0.8f, 0.8f, 1f);
-        go.AddComponent<BoxCollider2D>();
-        var r = go.AddComponent<RiddleObject>();
+        RiddleObject r;
+        if (pfBlock != null)
+        {
+            var go = Instantiate(pfBlock, new Vector3(pos.x, pos.y, 0f), Quaternion.identity);
+            go.name = name;
+            r = go.GetComponent<RiddleObject>();
+        }
+        else
+        {
+            var go = new GameObject(name);
+            go.transform.position = pos;
+            go.transform.localScale = new Vector3(0.8f, 0.8f, 1f);
+            go.AddComponent<BoxCollider2D>();
+            r = go.AddComponent<RiddleObject>();
+            r.visual = MakeVisual(go.transform, new Color(1f, 0.85f, 0.2f), 1);
+        }
         r.bankId = bankId;
         r.question = RiddleBank.All[bankId].question;
         r.answers = RiddleBank.All[bankId].answers;
-        r.visual = MakeVisual(go.transform, new Color(1f, 0.85f, 0.2f), 1);
         riddles.Add(r);
         return r;
     }
@@ -362,6 +429,7 @@ public class GameManager : MonoBehaviour
         if (current.IsCorrect(answerField.text))
         {
             current.MarkSolved();
+            AudioManager.Get().PlayCorrect();
             solved++;
             UpdateProgress();
 
@@ -382,6 +450,7 @@ public class GameManager : MonoBehaviour
         else
         {
             timeLeft -= WrongPenalty;
+            AudioManager.Get().PlayWrong();
             riddleFeedback.text = "Mauvaise réponse ! -" + WrongPenalty + " secondes";
             answerField.text = "";
             answerField.ActivateInputField();
@@ -421,6 +490,8 @@ public class GameManager : MonoBehaviour
         player.canMove = false;
         hintText.gameObject.SetActive(false);
         if (win) Checkpoint.Clear();
+        AudioManager.Get().StopMusic();
+        if (win) AudioManager.Get().PlayWin(); else AudioManager.Get().PlayLose();
 
         endPanel.SetActive(true);
         bool canResume = !win && Checkpoint.hasCheckpoint;
